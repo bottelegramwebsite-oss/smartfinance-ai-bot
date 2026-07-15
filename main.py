@@ -27,6 +27,7 @@ from bot.handlers import (
     add_command,
     delete_command,
     setsheet_command,
+    clear_command,
     message_handler,
     callback_handler,
     error_handler,
@@ -73,6 +74,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("add",      add_command))
     app.add_handler(CommandHandler("delete",   delete_command))
     app.add_handler(CommandHandler("setsheet", setsheet_command))
+    app.add_handler(CommandHandler("clear",    clear_command))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     app.add_error_handler(error_handler)

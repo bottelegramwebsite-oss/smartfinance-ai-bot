@@ -73,6 +73,13 @@ def get_session_factory() -> sessionmaker:
             bind=get_engine(),
             autocommit=False,
             autoflush=False,
+            # Penting: tanpa ini, ORM objects yang dikembalikan dari
+            # `with get_db_session() as session: ... return obj` menjadi
+            # "detached" setelah session ditutup — attribute apapun yang
+            # diakses sesudahnya (mis. user.telegram_id) melempar
+            # DetachedInstanceError karena SQLAlchemy meng-expire semua
+            # atribut setelah commit secara default.
+            expire_on_commit=False,
         )
     return _SessionFactory
 

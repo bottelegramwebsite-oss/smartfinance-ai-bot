@@ -27,9 +27,9 @@ def upsert_user(telegram_id: int, username: Optional[str], first_name: Optional[
         # ── 2. Cari orphaned web registration (telegram_id masih None, username cocok) ──
         orphaned_web_user = None
         if username:
-            clean_username = username.replace("@", "").lower()
+            clean_username = username.strip().replace("@", "").strip().lower()
             orphaned_web_user = session.query(User).filter(
-                func.lower(func.replace(User.username, "@", "")) == clean_username,
+                func.lower(func.trim(func.replace(User.username, "@", ""))) == clean_username,
                 User.telegram_id == None,
             ).first()
 
@@ -87,8 +87,6 @@ def upsert_user(telegram_id: int, username: Optional[str], first_name: Optional[
         if first_name and user.first_name != first_name:
             user.first_name = first_name
 
-        session.commit()
-        session.refresh(user)
         return user
 
 def set_user_spreadsheet(telegram_id: int, spreadsheet_id: str) -> None:
@@ -112,6 +110,16 @@ def get_user_spreadsheet_id(telegram_id: int) -> Optional[str]:
         if user is None:
             return None
         return user.spreadsheet_id
+
+def clear_user_history(user_id: int) -> bool:
+    """
+    Hapus semua riwayat transaksi lokal milik user (dipakai oleh /clear).
+    Berjalan dalam satu transaksi database (commit/rollback otomatis via
+    get_db_session), sehingga tetap transaction-safe.
+    """
+    with get_db_session() as session:
+        session.query(Transaction).filter_by(user_id=user_id).delete(synchronize_session="fetch")
+    return True
 
 # ── Simpan Transaksi ──────────────────────────────────────────────────────────
 

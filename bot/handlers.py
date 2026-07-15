@@ -222,8 +222,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<code>/delete [ID]</code>\n\n"
         "<b>4. Sinkronisasi Google Sheets</b>\n"
         "<code>/setsheet [link_google_sheet]</code>\n\n"
-        "<b>5. Semua Perintah</b>\n"
-        "/start /summary /monthly /history /add /delete /setsheet /help",
+        "<b>5. Bersihkan Riwayat Lokal</b>\n"
+        "<code>/clear</code> — hapus semua riwayat transaksi lokal Anda\n\n"
+        "<b>6. Semua Perintah</b>\n"
+        "/start /summary /monthly /history /add /delete /setsheet /clear /help",
         parse_mode=ParseMode.HTML,
         reply_markup=main_menu_keyboard(),
     )
@@ -419,6 +421,25 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"❌ Transaksi <b>#{tx_id}</b> tidak ditemukan.",
             parse_mode=ParseMode.HTML,
         )
+
+
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Hapus semua riwayat transaksi lokal milik user (mulai dari awal)."""
+    user_id = update.effective_user.id
+    try:
+        transaction_service.clear_user_history(user_id)
+    except Exception as e:
+        logger.error(f"[user {user_id}] Gagal membersihkan riwayat lokal: {e}", exc_info=True)
+        await update.message.reply_text(
+            "❌ Gagal membersihkan riwayat. Silakan coba lagi.",
+            reply_markup=main_menu_keyboard(),
+        )
+        return
+
+    await update.message.reply_text(
+        "🧹 Semua riwayat transaksi lokal Anda telah dihapus bersih!",
+        reply_markup=main_menu_keyboard(),
+    )
 
 
 async def setsheet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

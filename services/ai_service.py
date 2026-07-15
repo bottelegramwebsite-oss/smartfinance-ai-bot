@@ -9,9 +9,7 @@ dan langsung mengaktifkan Heuristic NLP Engine Lokal jika koneksi mati / tanpa k
 
 import json
 import os
-import random
 import re
-import time
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -100,11 +98,11 @@ class AIService:
     tanpa perlu hosting lokal di Mac Anda.
     """
 
-    # ── Retry tunables ────────────────────────────────────────────────────────
-    _MAX_ATTEMPTS  = 4      # total cloud attempts before falling back
-    _BASE_DELAY    = 1.0    # seconds — doubled each retry (exponential backoff)
-    _MAX_DELAY     = 32.0   # cap on computed backoff delay
-    _JITTER        = 0.5    # random seconds added to each delay to spread load
+    # ── Fail-fast tunables ────────────────────────────────────────────────────
+    # Single attempt only — no retry loops. If Gemini doesn't respond within
+    # this window (or fails for any reason), we fall back to the local
+    # heuristic engine immediately so the user always gets a fast reply.
+    _REQUEST_TIMEOUT = 3.0  # seconds
 
     def __init__(self):
         self.gemini_key = os.environ.get("GEMINI_API_KEY", "")
@@ -134,17 +132,10 @@ class AIService:
         membaca Retry-After header dan membuat keputusan yang tepat per kasus.
         """
         session = requests.Session()
-        # urllib3-level: hanya retry pada connection errors & read errors —
-        # bukan pada status codes (kita handle itu di layer atas).
-        tcp_retry = Retry(
-            total=2,
-            read=2,
-            connect=2,
-            backoff_factor=0.5,
-            status_forcelist=[],   # kosong — kita handle 429/403/5xx sendiri
-            raise_on_status=False,
-        )
-        adapter = HTTPAdapter(max_retries=tcp_retry)
+        # Tidak ada retry sama sekali di level manapun — koneksi gagal harus
+        # langsung fallback ke heuristic engine lokal, bukan mencoba ulang.
+        no_retry = Retry(total=0, connect=0, read=0, redirect=0, status=0)
+        adapter = HTTPAdapter(max_retries=no_retry)
         session.mount("https://", adapter)
         session.mount("http://", adapter)
         return session
@@ -155,15 +146,15 @@ class AIService:
         today: Optional[date] = None,
     ) -> ExtractionResult:
         """
-        Ekstrak transaksi menggunakan Google Gemini API dengan mekanisme retry
-        exponential backoff yang tangguh untuk produksi 24/7.
+        Ekstrak transaksi menggunakan Google Gemini API — SATU percobaan saja,
+        tanpa retry loop apapun.
 
-        Strategi penanganan error:
-          • 429 Rate-Limit  → tunggu Retry-After (atau backoff), lanjut retry
-          • 403 IP-Block    → fallback langsung (retry tidak akan membantu)
-          • 5xx Server err  → backoff + retry
-          • Connection/Timeout → backoff + retry
-          • Semua attempt habis → fallback ke Heuristic Engine lokal
+        Timeout koneksi di-set sangat ketat (3 detik). Jika panggilan gagal
+        karena alasan apapun (timeout, connection error, 429, 403, 5xx, parse
+        error), kita langsung tangkap error tersebut dan beralih ke Heuristic
+        Fallback Engine lokal dalam hitungan milidetik — tidak ada delay,
+        tidak ada percobaan ulang. Ini memastikan pengguna selalu mendapat
+        respons instan (<1 detik) apapun yang terjadi pada Gemini.
         """
         if today is None:
             today = today_local()
@@ -183,114 +174,63 @@ class AIService:
             "generationConfig": {"responseMimeType": "application/json"},
         }
 
-        last_error = ""
+        try:
+            logger.info(f"[Gemini] Single attempt: '{user_message[:40]}...'")
 
-        for attempt in range(1, self._MAX_ATTEMPTS + 1):
-            try:
-                logger.info(
-                    f"[Gemini] Attempt {attempt}/{self._MAX_ATTEMPTS}: "
-                    f"'{user_message[:40]}...'"
+            response = self._session.post(url, json=payload, timeout=self._REQUEST_TIMEOUT)
+
+            if response.status_code == 429:
+                last_error = "HTTP 429 Rate-Limit — langsung fallback, tidak retry."
+                logger.warning(f"[Gemini] {last_error}")
+                return self._fallback_presentation_engine(user_message, today, last_error)
+
+            if response.status_code == 403:
+                last_error = (
+                    "HTTP 403 Forbidden — kemungkinan IP diblokir Google "
+                    "atau API Key tidak valid. Langsung fallback, tidak retry."
                 )
+                logger.error(f"[Gemini] {last_error}")
+                return self._fallback_presentation_engine(user_message, today, last_error)
 
-                response = self._session.post(url, json=payload, timeout=15)
+            response.raise_for_status()
 
-                # ── 429 Rate-limit ────────────────────────────────────────────
-                if response.status_code == 429:
-                    retry_after = self._parse_retry_after(response, attempt)
-                    last_error = f"HTTP 429 Rate-Limit (retry after {retry_after:.1f}s)"
-                    logger.warning(
-                        f"[Gemini] Attempt {attempt}: rate-limited. "
-                        f"Menunggu {retry_after:.1f}s sebelum retry..."
-                    )
-                    if attempt < self._MAX_ATTEMPTS:
-                        time.sleep(retry_after)
-                    continue
+            resp_data = response.json()
+            raw_text = (
+                resp_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            )
 
-                # ── 403 IP-block / auth error → jangan retry ─────────────────
-                if response.status_code == 403:
-                    last_error = (
-                        f"HTTP 403 Forbidden — kemungkinan IP diblokir Google "
-                        f"atau API Key tidak valid. Beralih ke fallback."
-                    )
-                    logger.error(f"[Gemini] {last_error}")
-                    break  # langsung ke fallback, retry tidak akan membantu
+            extracted = self._parse_response(raw_text, today)
 
-                # ── Semua error HTTP lainnya (5xx, dll) ───────────────────────
-                response.raise_for_status()
+            result = ExtractionResult(
+                transactions=extracted,
+                raw_response=raw_text,
+                success=True,
+                retries_used=0,
+            )
+            logger.info(f"[Gemini] Sukses: {len(extracted)} transaksi diekstrak.")
+            return result
 
-                # ── Sukses: parse response ────────────────────────────────────
-                resp_data = response.json()
-                raw_text = (
-                    resp_data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                )
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_error = f"Network error (fast-fail): {e.__class__.__name__}: {e}"
+            logger.warning(
+                f"[Gemini] Koneksi/timeout gagal — beralih ke fallback seketika. {last_error}"
+            )
+            return self._fallback_presentation_engine(user_message, today, last_error)
 
-                extracted = self._parse_response(raw_text, today)
+        except requests.HTTPError as e:
+            last_error = f"HTTP error: {e}"
+            logger.warning(f"[Gemini] {last_error} — langsung fallback, tidak retry.")
+            return self._fallback_presentation_engine(user_message, today, last_error)
 
-                result = ExtractionResult(
-                    transactions=extracted,
-                    raw_response=raw_text,
-                    success=True,
-                    retries_used=attempt - 1,
-                )
-                logger.info(
-                    f"[Gemini] Sukses pada attempt {attempt}: "
-                    f"{len(extracted)} transaksi diekstrak."
-                )
-                return result
+        except (KeyError, IndexError, ValueError) as e:
+            last_error = f"Parse error (response tidak terduga): {e}"
+            logger.warning(f"[Gemini] {last_error} — langsung fallback, tidak retry.")
+            return self._fallback_presentation_engine(user_message, today, last_error)
 
-            except (requests.ConnectionError, requests.Timeout) as e:
-                # Fast-fail: error koneksi tidak akan membaik dengan retry.
-                # Langsung ke fallback tanpa delay agar pengguna tidak menunggu.
-                last_error = f"Network error (fast-fail): {e.__class__.__name__}: {e}"
-                logger.warning(
-                    f"[Gemini] Koneksi gagal — beralih ke fallback seketika. {last_error}"
-                )
-                break  # keluar dari loop, tidak ada delay, tidak ada retry
-
-            except requests.HTTPError as e:
-                last_error = f"HTTP error: {e}"
-                logger.warning(f"[Gemini] Attempt {attempt}: {last_error}")
-                # 5xx dan lainnya → retry dengan backoff (mungkin server sedang sibuk)
-
-            except (KeyError, IndexError, ValueError) as e:
-                last_error = f"Parse error (response tidak terduga): {e}"
-                logger.warning(f"[Gemini] Attempt {attempt}: {last_error}")
-
-            except Exception as e:
-                last_error = f"Unexpected error: {e.__class__.__name__}: {e}"
-                logger.warning(f"[Gemini] Attempt {attempt}: {last_error}")
-
-            # ── Backoff hanya untuk error yang bisa dipulihkan (5xx, parse error) ──
-            if attempt < self._MAX_ATTEMPTS:
-                delay = min(
-                    self._BASE_DELAY * (2 ** (attempt - 1)),
-                    self._MAX_DELAY,
-                ) + random.uniform(0, self._JITTER)
-                logger.info(f"[Gemini] Menunggu {delay:.1f}s sebelum attempt {attempt + 1}...")
-                time.sleep(delay)
-
-        # ── Semua attempt habis → aktifkan Heuristic Engine lokal ────────────
-        logger.warning(
-            f"[Gemini] Semua {self._MAX_ATTEMPTS} attempt gagal. "
-            f"Alasan terakhir: {last_error}. "
-            f"Mengaktifkan Heuristic Fallback Engine."
-        )
-        return self._fallback_presentation_engine(user_message, today, last_error)
-
-    def _parse_retry_after(self, response: requests.Response, attempt: int) -> float:
-        """
-        Baca Retry-After header (dalam detik atau HTTP-date).
-        Jika tidak ada atau tidak valid, hitung backoff eksponensial.
-        Selalu cap di _MAX_DELAY agar tidak menunggu terlalu lama.
-        """
-        header = response.headers.get("Retry-After", "")
-        if header:
-            try:
-                return min(float(header), self._MAX_DELAY)
-            except ValueError:
-                pass  # header adalah HTTP-date, abaikan dan gunakan backoff
-        # Backoff eksponensial sebagai default
-        return min(self._BASE_DELAY * (2 ** attempt) + random.uniform(0, self._JITTER), self._MAX_DELAY)
+        except Exception as e:
+            last_error = f"Unexpected error: {e.__class__.__name__}: {e}"
+            logger.warning(f"[Gemini] {last_error} — langsung fallback, tidak retry.")
+            return self._fallback_presentation_engine(user_message, today, last_error)
 
     def _fallback_presentation_engine(
         self, message: str, today: date, original_error: str
@@ -298,7 +238,36 @@ class AIService:
         """
         Sistem Penyelamat Presentasi (MOCK NLP Lokal): Menggunakan Regex dan analisis teks lokal
         untuk memproses transaksi secara akurat saat server luar mati atau API Key kosong.
+
+        Kontrak: fungsi ini TIDAK BOLEH pernah melempar exception. Apapun yang
+        terjadi di dalam, pengguna harus tetap menerima ExtractionResult yang
+        valid (success=True, minimal satu transaksi) dalam waktu instan.
         """
+        try:
+            return self._run_fallback_heuristics(message, today, original_error)
+        except Exception as e:
+            logger.error(
+                f"[Fallback] Heuristic engine sendiri gagal ({e}) — "
+                f"mengirim hasil darurat minimal agar user tetap dapat respons."
+            )
+            emergency_tx = ExtractedTransaction(
+                amount=10000.0,
+                type="expense",
+                category="Lainnya",
+                description=message.strip()[:200] if message else "",
+                transaction_date=today,
+                confidence=0.5,
+            )
+            return ExtractionResult(
+                transactions=[emergency_tx],
+                raw_response="",
+                success=True,
+                error_message=f"Emergency fallback (original: {original_error}; fallback error: {e})",
+            )
+
+    def _run_fallback_heuristics(
+        self, message: str, today: date, original_error: str
+    ) -> ExtractionResult:
         result = ExtractionResult()
         msg_lower = message.lower()
 

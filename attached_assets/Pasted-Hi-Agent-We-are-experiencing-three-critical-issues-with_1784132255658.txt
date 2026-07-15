@@ -1,0 +1,43 @@
+Hi Agent,
+
+We are experiencing three critical issues with the current Telegram Bot and Web Dashboard integration that need immediate fixes across services/transaction_service.py, services/ai_service.py, and bot/handlers.py.
+
+Please fix all of them in parallel and redeploy the code:
+
+ISSUE 1: Bot & Web Dashboard Integration Sync (Strict Username Matching)
+
+The Problem: When users register a Google Sheet on the website, they enter their username (with or without "@", mixed casing, spaces). When they interact with the bot, the bot fails to match them automatically, forcing them to run /setsheet manually.
+
+The Solution in services/transaction_service.py:
+
+Update upsert_user to normalize usernames aggressively.
+
+For both the Telegram user profile and orphaned web user profiles: strip the "@" symbol, convert the username string to lowercase, and strip any leading/trailing whitespace.
+
+When matching orphaned web users (where telegram_id is None), perform this loose/fuzzy match. If a match is found, bind their telegram_id and merge their registered spreadsheet_id instantly.
+
+ISSUE 2: Sticky History & Clearing Old Records
+
+The Problem: The Telegram transaction history (/history) doesn't clear when a new sheet is connected, leading to confusion. Additionally, users have no way to manually wipe their local database cache to start fresh.
+
+The Solution:
+
+In services/transaction_service.py (upsert_user): If a matched user is connecting a NEW sheet that is DIFFERENT from their previous one, automatically delete all their previous transactions from the local SQLite database so they start with a clean Slate (0 transactions).
+
+In services/transaction_service.py: Create a new helper function clear_user_history(user_id: int) -> bool that runs: session.query(Transaction).filter_by(user_id=user_id).delete().
+
+In bot/handlers.py: Create and register a /clear command. When a user types /clear, it should invoke clear_user_history, clear their local SQLite cache completely, and reply with: "🧹 Semua riwayat transaksi lokal Anda telah dihapus bersih!"
+
+ISSUE 3: Latency, Delay & Empty Responses from Bot
+
+The Problem: The Gemini API call has a long timeout. When Gemini is blocked or slow on the Replit server, it halts the bot for up to 30 seconds, causing Telegram to drop the connection and leaving the user with an empty or extremely delayed response.
+
+The Solution in services/ai_service.py:
+
+Reduce the API connection timeout for Gemini to exactly 3 seconds.
+
+Remove all retry loops for connection timeouts, connection errors, or 403 Forbidden responses. If the call fails on the very first attempt, immediately catch the error, log it, and trigger the local fallback engine (_fallback_presentation_engine) within milliseconds.
+
+Ensure the fallback engine never throws exceptions and always returns a valid, parsed ExtractionResult so the user gets an instant response (< 1 second) under any circumstances.
+
+Please apply these changes, run the tests to verify the database session is transaction-safe, and trigger a Publish/Republish to production once complete.

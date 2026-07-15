@@ -1,0 +1,2 @@
+- [SQLAlchemy detached-instance trap](sqlalchemy-detached-instance.md) — returning ORM objects from a `with session:` helper needs `expire_on_commit=False` or callers get DetachedInstanceError
+- [AI extraction fail-fast pattern](ai-fallback-fail-fast.md) — this project's Gemini call is single-attempt (3s timeout, no retries) and always degrades to a local heuristic fallback that itself cannot raise
