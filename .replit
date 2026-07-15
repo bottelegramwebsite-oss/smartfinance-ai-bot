@@ -38,6 +38,6 @@ localPort = 5050
 externalPort = 3000
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["python", "dashboard/run.py"]
+deploymentTarget = "vm"
+run = ["python", "main.py"]
 build = ["pip", "install", "-r", "requirements.txt"]
