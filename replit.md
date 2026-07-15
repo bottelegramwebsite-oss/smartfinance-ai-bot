@@ -27,13 +27,14 @@ The workflow **"Start application"** is already configured and runs this command
 | Secret | Description |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | From @BotFather on Telegram |
+| `GEMINI_API_KEY` | From Google AI Studio. Actually used by `services/ai_service.py` for AI transaction extraction — without it the bot silently falls back to a local heuristic parser. |
 
 ## Optional configuration
 
 | Variable | Default | Description |
 |---|---|---|
-| `GROQ_API_KEY` | hardcoded in `config/settings.py` | Groq API key |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model name |
+| `GROQ_API_KEY` | required by `config/settings.py` at startup, but currently unused by any code path (dead config left over from an earlier design) | Groq API key |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model name (unused, see above) |
 | `DATABASE_PATH` | `./data/finance.db` | SQLite database path |
 | `GOOGLE_CREDENTIALS_PATH` | `./credentials.json` | Google service account JSON (enables Sheets sync) |
 | `DASHBOARD_URL` | Replit app URL | Public URL shown in bot messages |
