@@ -1,0 +1,39 @@
+# Bot Keuangan AI — Python Dependencies
+# Install: pip install -r requirements.txt
+
+# ── Telegram Bot ─────────────────────────────────────────────
+python-telegram-bot==21.9
+
+# ── Groq AI SDK ──────────────────────────────────────────────
+groq==1.5.0
+
+# ── Database ─────────────────────────────────────────────────
+SQLAlchemy==2.0.36
+
+# ── Environment Variables ────────────────────────────────────
+python-dotenv==1.0.1
+
+# ── Timezone ─────────────────────────────────────────────────
+pytz==2024.2
+
+# ── Google Sheets Sync ───────────────────────────────────────
+gspread==6.1.4
+google-auth==2.35.0
+
+# ── Web Dashboard Backend ────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# ── Production Server ────────────────────────────────────────
+gunicorn==21.2.0
+fastapi==0.115.6
+google-auth==2.35.0
+groq==1.5.0
+gspread==6.1.4
+gunicorn==21.2.0
+python-dotenv==1.0.1
+python-telegram-bot==21.9
+pytz==2024.2
+SQLAlchemy==2.0.36
+telegram
+uvicorn[standard]==0.34.0

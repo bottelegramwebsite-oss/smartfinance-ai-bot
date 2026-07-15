@@ -1,0 +1,23 @@
+# Secrets & credentials
+.env
+credentials.json
+
+# Database & runtime data
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Logs
+logs/*.log
+logs/*.log.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pythonlibs/
+
+# Replit / system
+.cache/
+.upm/
+zipFile.zip

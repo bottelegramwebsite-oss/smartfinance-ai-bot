@@ -1,0 +1,36 @@
+services:
+  # Dashboard Web Service
+  - type: web
+    name: smartfinance-dashboard
+    env: python
+    region: singapore
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python dashboard/run.py"
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS_BASE64
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+  # Bot Telegram Background Worker
+  - type: worker
+    name: smartfinance-bot
+    env: python
+    region: singapore
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS_BASE64
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
