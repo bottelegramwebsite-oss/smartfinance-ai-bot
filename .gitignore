@@ -1,23 +1,26 @@
-# Secrets & credentials
+# ── Secrets & credentials ─────────────────────────────────────
 .env
 credentials.json
 
-# Database & runtime data
+# ── Database & runtime data ───────────────────────────────────
 data/*.db
 data/*.db-wal
 data/*.db-shm
+*.db          # bare database files in root
 
-# Logs
+# ── Logs ──────────────────────────────────────────────────────
 logs/*.log
 logs/*.log.*
 
-# Python
+# ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
 .pythonlibs/
 
-# Replit / system
+# ── Replit / system ───────────────────────────────────────────
+.replit
+replit.nix
 .cache/
 .upm/
 zipFile.zip
