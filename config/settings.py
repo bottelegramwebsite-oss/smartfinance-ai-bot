@@ -65,7 +65,7 @@ GOOGLE_CREDENTIALS_PATH: str = _get_env(
 # ke tempat yang benar. Set env var DASHBOARD_URL jika domain berubah.
 DASHBOARD_URL: str = _get_env(
     "DASHBOARD_URL",
-    default="https://telegram-finance-bot-1--bintangteo4.replit.app",
+    default="https://smartfinanceai--bottelegramwebs.replit.app",
     required=False,
 )
 

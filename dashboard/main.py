@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -38,6 +39,44 @@ from models.transaction import User
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
+
+async def _notify_user_linked(telegram_id: int, display_name: str, sheet_title: str) -> None:
+    """
+    Kirim pesan selamat datang ke user via Telegram setelah mereka berhasil
+    mendaftarkan Google Sheet melalui website — tanpa user perlu melakukan
+    apapun di bot.
+
+    Panggil hanya jika telegram_id sudah diketahui (user sudah pernah /start
+    bot sebelumnya); Telegram tidak mengizinkan bot mengirim pesan ke user
+    yang belum memulai percakapan terlebih dahulu.
+    """
+    if not _TELEGRAM_BOT_TOKEN or not telegram_id:
+        return
+    nama = display_name or "Kamu"
+    text = (
+        f"🎉 <b>Google Sheet berhasil terhubung, {nama}!</b>\n\n"
+        f"📊 <b>Sheet</b>: {sheet_title}\n\n"
+        "Sekarang kamu bisa langsung catat transaksi di sini:\n"
+        "• <i>Makan siang 30rb</i>\n"
+        "• <i>Gaji masuk 5jt</i>\n"
+        "• <i>Bayar listrik 200rb dan beli kopi 25rb</i>\n\n"
+        "Ketik /summary untuk melihat ringkasan, atau /help untuk semua perintah."
+    )
+    url = f"https://api.telegram.org/bot{_TELEGRAM_BOT_TOKEN}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(url, json={
+                "chat_id": telegram_id,
+                "text": text,
+                "parse_mode": "HTML",
+            })
+        logger.info(f"[Notify] Pesan selamat datang dikirim ke Telegram ID {telegram_id}")
+    except Exception as e:
+        # Non-fatal — user sudah terdaftar, notifikasi gagal tidak perlu dibatalkan
+        logger.warning(f"[Notify] Gagal kirim notifikasi ke Telegram ID {telegram_id}: {e}")
 
 # ── Init DB saat startup ──────────────────────────────────────────────────────
 init_db()
@@ -207,8 +246,9 @@ async def register(body: RegisterRequest):
             linked_user.web_token = web_token
             session.commit()
             session.refresh(linked_user)
-            user_id   = linked_user.id
-            user_name = linked_user.name
+            user_id        = linked_user.id
+            user_name      = linked_user.name
+            linked_tg_id   = linked_user.telegram_id
             logger.info(
                 f"User terdaftar via web & langsung ter-link ke Telegram @{telegram_username} "
                 f"(id={user_id}) sheet='{sheet_title}'"
@@ -228,9 +268,14 @@ async def register(body: RegisterRequest):
             session.add(user)
             session.commit()
             session.refresh(user)
-            user_id   = user.id
-            user_name = user.name
+            user_id        = user.id
+            user_name      = user.name
+            linked_tg_id   = None
             logger.info(f"User baru terdaftar via web: '{name}' sheet='{sheet_title}'")
+
+    # Kirim notifikasi Telegram jika user sudah pernah /start bot sebelumnya
+    if linked_tg_id:
+        await _notify_user_linked(linked_tg_id, user_name, sheet_title)
 
     try:
         data = read_sheet_data(spreadsheet_id)
@@ -356,10 +401,16 @@ async def connect(body: ConnectRequest):
             session.commit()
             session.refresh(user)
 
-        spreadsheet_id = user.spreadsheet_id
-        user_name      = user.name
-        user_id        = user.id
-        web_token      = user.web_token
+        spreadsheet_id   = user.spreadsheet_id
+        user_name        = user.name
+        user_id          = user.id
+        web_token        = user.web_token
+        linked_tg_id     = user.telegram_id
+
+    # Kirim notifikasi Telegram jika user sudah pernah /start bot sebelumnya
+    # dan ini adalah permintaan dengan sheet_url baru (bukan sekadar login)
+    if sheet_url and linked_tg_id:
+        await _notify_user_linked(linked_tg_id, user_name, info if ok else "")
 
     try:
         data = read_sheet_data(spreadsheet_id)

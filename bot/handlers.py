@@ -4,7 +4,9 @@ Handler untuk semua command dan message dari Telegram.
 Menggunakan python-telegram-bot v20+ (async-based).
 """
 
+import asyncio
 from datetime import date
+from functools import partial
 from typing import Optional
 
 from telegram import Update
@@ -467,7 +469,10 @@ async def setsheet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     processing_msg = await update.message.reply_text("⏳ Sedang memvalidasi akses ke Google Sheet...")
 
     try:
-        success, result_info = validate_sheet_access(spreadsheet_id)
+        loop = asyncio.get_event_loop()
+        success, result_info = await loop.run_in_executor(
+            None, partial(validate_sheet_access, spreadsheet_id)
+        )
     except Exception as e:
         await processing_msg.edit_text("❌ Gagal menghubungi Google Sheets API.", parse_mode=ParseMode.HTML)
         return
@@ -518,9 +523,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await update.message.chat.send_action("typing")
 
+    loop = asyncio.get_event_loop()
     try:
-        saved, errors, extraction_result = transaction_service.process_natural_language_input(
-            user.id, text
+        saved, errors, extraction_result = await loop.run_in_executor(
+            None,
+            partial(transaction_service.process_natural_language_input, user.id, text),
         )
     except DBOperationalError as e:
         logger.error(f"[user {user.id}] Database locked/busy: {e}", exc_info=True)
