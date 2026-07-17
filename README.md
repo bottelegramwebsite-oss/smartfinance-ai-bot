@@ -1,4 +1,4 @@
-# 🤖 SmartFinance AI Bot
+# 🚀 SmartFinance AI - Bot Telegram & Web Dashboard
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white"/>
@@ -8,20 +8,43 @@
   <img src="https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge&logo=sqlite&logoColor=white"/>
 </p>
 
-> **SmartFinance AI** is a Telegram-based personal finance bot powered by Google Gemini AI. It lets you record income and expenses in plain Indonesian language, automatically categorizes them, and syncs everything to a Google Sheet — all from your Telegram chat.
+<p align="center">
+  <strong>Project Tugas Akhir - Penerapan Kecerdasan Buatan (AI)</strong><br/>
+  Teknik Industri / Teknik Informatika — Universitas Stikubank (Unisbank) Semarang
+</p>
+
+---
+
+## 🌐 URL Aplikasi (Live Deployment)
+
+| Platform | URL |
+|---|---|
+| 🖥️ Web Dashboard | [https://smartfinanceai--bottelegramwebs.replit.app](https://smartfinanceai--bottelegramwebs.replit.app) |
+| 🤖 Bot Telegram | [@SmartFinanceAIBot](https://t.me/SmartFinanceAIBot) |
+
+---
+
+## 👥 Anggota Kelompok: smartfinanceai
+
+| Nama | NIM | Program Studi |
+|---|---|---|
+| Naufal Ilhamul Lutfi | 24.04.51.0006 | Teknik Industri UNISBANK |
+| Quinamora Divi N | 24.04.51.0010 | Teknik Industri UNISBANK |
+| Bintang Teo Cahya R | 24.04.51.0012 | Teknik Industri UNISBANK |
+| Lailatun Najwa M | 24.04.51.0014 | Teknik Industri UNISBANK |
 
 ---
 
 ## ✨ Features
 
-- 💬 **Natural Language Input** — Type `"Makan siang 30rb"` or `"Gaji bulan ini 5jt"` and the AI extracts the transaction automatically
-- 🤖 **Google Gemini AI** — Intelligent extraction with a local heuristic fallback for reliability
-- 📊 **FastAPI Web Dashboard** — View and manage your finances from a browser
-- 📈 **Google Sheets Sync** — Optionally link a Google Sheet to keep a live spreadsheet copy
-- 🗂️ **Transaction History** — Browse, filter, and delete past records
-- 📅 **Monthly Reports** — Category breakdowns per month
-- 🗑️ **One-command History Clear** — `/clear` wipes all local records instantly
-- 🔔 **Auto-notification** — Telegram confirms when your Google Sheet is linked via the dashboard
+- 💬 **Natural Language Input** — Ketik `"Makan siang 30rb"` atau `"Gaji bulan ini 5jt"` dan AI langsung mengekstrak transaksi secara otomatis
+- 🤖 **Google Gemini AI** — Ekstraksi cerdas dengan *Heuristic Local Fallback Engine* untuk keandalan tinggi
+- 📊 **FastAPI Web Dashboard** — Pantau dan kelola keuangan dari browser
+- 📈 **Google Sheets Sync** — Sinkronisasi data transaksi ke Google Sheet secara real-time
+- 🗂️ **Transaction History** — Browse, filter, dan hapus riwayat transaksi
+- 📅 **Monthly Reports** — Laporan bulanan dengan breakdown per kategori
+- 🗑️ **One-command History Clear** — `/clear` menghapus semua riwayat lokal seketika
+- 🔔 **Auto-notification** — Telegram mengonfirmasi saat Google Sheet berhasil terhubung via dashboard
 
 ---
 
@@ -30,12 +53,53 @@
 | Layer | Technology |
 |---|---|
 | Bot framework | `python-telegram-bot` 21.9 (async polling) |
-| AI extraction | Google Gemini 1.5 Flash via HTTP |
+| AI extraction | Google Gemini 1.5 Flash via HTTP (3-second fast-fail) |
+| Fallback engine | Heuristic Local Fallback Engine (rule-based, zero-dependency) |
 | Web dashboard | FastAPI + Uvicorn (port 5000) |
-| Database | SQLite via SQLAlchemy |
-| Sheets sync | `gspread` + Google service account |
+| Primary database | SQLite via SQLAlchemy (`connect_args={"timeout": 30}`) |
+| Secondary storage | Google Sheets via `gspread` + service account |
 | HTTP client | `httpx` |
 | Config | `python-dotenv` |
+
+---
+
+## 🏗️ Hybrid Database Architecture
+
+SmartFinance AI menggunakan arsitektur **hybrid database** dua lapis:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    USER INPUT (Telegram)                 │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│              AI LAYER (Google Gemini 1.5 Flash)         │
+│  • Single-attempt, 3-second timeout (fast-fail)         │
+│  • On failure → Heuristic Local Fallback Engine         │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│           PRIMARY: SQLite (via SQLAlchemy)               │
+│  • connect_args={"timeout": 30}  ← prevents DB locking  │
+│  • expire_on_commit=False  ← prevents DetachedInstance  │
+│  • Local, fast, always-available                        │
+└────────────────────────┬────────────────────────────────┘
+                         │  (optional sync)
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│           SECONDARY: Google Sheets (gspread)            │
+│  • Linked per-user via /setsheet command                │
+│  • Service account auth (GOOGLE_CREDENTIALS_BASE64)     │
+│  • Live spreadsheet copy for sharing & analysis         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Key reliability decisions:
+- **SQLite `timeout: 30`** — prevents `OperationalError: database is locked` under concurrent dashboard + bot writes
+- **Google Gemini fast-fail (3s)** — if Gemini times out or returns an error, the system immediately falls back to the local heuristic engine without retrying, so users never wait
+- **Heuristic Local Fallback Engine** — a rule-based parser that handles common Indonesian currency patterns (`rb`, `jt`, `ribu`, `juta`) and transaction keywords without any external API call
 
 ---
 
@@ -88,7 +152,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` and fill in the real values (see [Environment Variables](#-environment-variables) below).
+Edit `.env` dan isi dengan nilai yang sebenarnya (lihat [Environment Variables](#-environment-variables) di bawah).
 
 ### 4. Run the application
 
@@ -96,7 +160,7 @@ Edit `.env` and fill in the real values (see [Environment Variables](#-environme
 python main.py
 ```
 
-This starts both the Telegram bot (polling) and the FastAPI dashboard on port 5000 simultaneously.
+Perintah ini menjalankan bot Telegram (polling) dan dashboard FastAPI di port 5000 secara bersamaan dalam satu proses.
 
 ---
 
@@ -104,16 +168,16 @@ This starts both the Telegram bot (polling) and the FastAPI dashboard on port 50
 
 | Variable | Required | Description |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | ✅ | Bot token from [@BotFather](https://t.me/BotFather) |
-| `GEMINI_API_KEY` | ✅ | API key from [Google AI Studio](https://aistudio.google.com/app/apikey) |
-| `SESSION_SECRET` | ✅ | Random string for signing dashboard session cookies |
-| `GOOGLE_CREDENTIALS_BASE64` | ✅ | Base64-encoded Google service account JSON (for Sheets sync) |
-| `GROQ_API_KEY` | ⚠️ | Reserved — required by config but not actively used |
-| `DASHBOARD_URL` | ➖ | Public URL of the dashboard (shown in `/start` message) |
+| `TELEGRAM_BOT_TOKEN` | ✅ | Token bot dari [@BotFather](https://t.me/BotFather) |
+| `GEMINI_API_KEY` | ✅ | API key dari [Google AI Studio](https://aistudio.google.com/app/apikey) |
+| `SESSION_SECRET` | ✅ | String acak untuk menandatangani session cookie dashboard |
+| `GOOGLE_CREDENTIALS_BASE64` | ✅ | Isi file JSON service account Google, di-encode Base64 |
+| `GROQ_API_KEY` | ⚠️ | Dicadangkan — dibutuhkan `config/settings.py` tapi belum dipakai |
+| `DASHBOARD_URL` | ➖ | URL publik dashboard (default: `https://smartfinanceai--bottelegramwebs.replit.app`) |
 
-> Encode your service account key: `base64 -w 0 credentials.json`
+> Encode service account key: `base64 -w 0 credentials.json`
 
-See `.env.example` for placeholder values and comments.
+Lihat `.env.example` untuk nilai placeholder dan komentar lengkap.
 
 ---
 
@@ -121,17 +185,17 @@ See `.env.example` for placeholder values and comments.
 
 | Command | Description |
 |---|---|
-| `/start` | Register and get onboarding instructions |
-| `/help` | Show all available commands |
-| `/summary` | Daily and all-time financial summary |
-| `/history` | Last 10 transactions |
-| `/monthly` | Monthly report with category breakdown |
-| `/add` | Manually add a transaction |
-| `/delete` | Delete a transaction by ID |
-| `/setsheet` | Link a Google Sheet for sync |
-| `/clear` | Wipe all local transaction history |
+| `/start` | Registrasi dan panduan onboarding |
+| `/help` | Tampilkan semua perintah yang tersedia |
+| `/summary` | Ringkasan keuangan harian dan all-time |
+| `/history` | 10 transaksi terakhir |
+| `/monthly` | Laporan bulanan dengan breakdown kategori |
+| `/add` | Tambah transaksi secara manual |
+| `/delete` | Hapus transaksi berdasarkan ID |
+| `/setsheet` | Hubungkan Google Sheet untuk sinkronisasi |
+| `/clear` | Hapus seluruh riwayat transaksi lokal |
 
-**Natural language** — just send a message like:
+**Natural language** — cukup kirim pesan seperti:
 - `"Beli kopi 25000"`
 - `"Terima gaji 4.5 juta"`
 - `"Bensin motor 50rb"`
@@ -142,18 +206,18 @@ See `.env.example` for placeholder values and comments.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/` | Main web interface |
-| `POST` | `/api/connect` | Link Telegram account to a Google Sheet |
-| `GET` | `/api/dashboard` | Fetch sheet data via web token |
-| `POST` | `/api/register` | Web-based user registration |
-| `POST` | `/api/login` | Web-based login |
-| `GET` | `/api/user-sheet` | Retrieve sheet data for a Telegram ID |
+| `GET` | `/` | Antarmuka web utama |
+| `POST` | `/api/connect` | Hubungkan akun Telegram ke Google Sheet |
+| `GET` | `/api/dashboard` | Ambil data sheet via web token |
+| `POST` | `/api/register` | Registrasi pengguna berbasis web |
+| `POST` | `/api/login` | Login berbasis web |
+| `GET` | `/api/user-sheet` | Ambil data sheet untuk Telegram ID tertentu |
 
 ---
 
 ## 🚀 Deployment
 
-This project is configured for a **Replit Reserved VM** deployment, which keeps the polling bot alive continuously.
+Project ini dikonfigurasi untuk **Replit Reserved VM** agar bot polling tetap aktif terus-menerus.
 
 ```toml
 # replit.toml
@@ -161,18 +225,19 @@ deploymentTarget = "vm"
 run = ["python", "main.py"]
 ```
 
-> ⚠️ Do **not** run the dev workflow and the deployed VM at the same time with the same `TELEGRAM_BOT_TOKEN` — Telegram only allows one active polling connection per bot.
+> ⚠️ Jangan jalankan dev workflow dan deployed VM secara bersamaan dengan `TELEGRAM_BOT_TOKEN` yang sama — Telegram hanya mengizinkan satu koneksi polling aktif per bot.
 
 ---
 
 ## 🔒 Security Notes
 
-- Never commit your real `.env` file — it is listed in `.gitignore`
-- `GOOGLE_CREDENTIALS_BASE64` grants access to your Google account; rotate the key if exposed
-- `SESSION_SECRET` should be a cryptographically random string (minimum 32 characters)
+- Jangan pernah commit file `.env` asli — sudah terdaftar di `.gitignore`
+- `GOOGLE_CREDENTIALS_BASE64` memberikan akses ke akun Google; rotate key jika terekspos
+- `SESSION_SECRET` harus berupa string acak kriptografis (minimum 32 karakter)
 
 ---
 
-## 📄 License
+## 📄 Lisensi
 
-This project was built for academic purposes as a university submission. All rights reserved by the authors.
+Project ini dibuat untuk keperluan akademis sebagai Tugas Akhir Semester (UAS).  
+© 2025 Kelompok smartfinanceai — Universitas Stikubank (Unisbank) Semarang. All rights reserved.
