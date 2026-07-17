@@ -32,6 +32,9 @@
 | Quinamora Divi N | 24.04.51.0010 | Teknik Industri UNISBANK |
 | Bintang Teo Cahya R | 24.04.51.0012 | Teknik Industri UNISBANK |
 | Lailatun Najwa M | 24.04.51.0014 | Teknik Industri UNISBANK |
+<p align="center">
+  <img src="./1000981854.jpg" width="750" alt="Poster UAS SmartFinance AI">
+</p>
 
 ---
 
