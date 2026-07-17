@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Project Tugas Akhir - Penerapan Kecerdasan Buatan (AI)</strong><br/>
-  Teknik Industri / Teknik Informatika — Universitas Stikubank (Unisbank) Semarang
+  Teknik Industri — Universitas Stikubank (Unisbank) Semarang
 </p>
 
 ---
